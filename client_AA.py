@@ -1,30 +1,38 @@
-# client.py
 import socket
 import pickle
 import random
-import rsa
 
 HOST = '127.0.0.1'
 PORT = 8080
 
-# Генерируем ключи клиента
-public_key, private_key = rsa.newkeys(1024)
+# Параметры Диффи-Хеллмана
+p = 23  # большое простое число
+g = 5   # примитивный корень по модулю p
 
-# Отправляем открытый ключ на сервер
+# Генерируем секретный ключ клиента
+a = random.randint(1, p-1)
+A = pow(g, a, p)
+
+# Подключаемся к серверу и отправляем параметры
 with socket.socket() as sock:
     sock.connect((HOST, PORT))
-    sock.send(pickle.dumps(public_key))
+    sock.send(pickle.dumps((p, g, A)))
 
-    # Принимаем открытый ключ сервера
+    # Принимаем параметры сервера
     msg = sock.recv(1024)
-    server_public_key = pickle.loads(msg)
+    p, g, B = pickle.loads(msg)
 
-    # Шифруем сообщение
-    message = "Секретное сообщение".encode()
-    encrypted = rsa.encrypt(message, server_public_key)
-    sock.send(encrypted)
+    # Вычисляем общий секрет
+    K = pow(B, a, p)
+    print("Общий секрет:", K)
 
-    # Принимаем ответ от сервера
-    encrypted_response = sock.recv(1024)
-    response = rsa.decrypt(encrypted_response, private_key)
-    print("Ответ:", response.decode())
+    # Отправляем и шифруем сообщение
+    message = "Привет, сервер!"
+    encrypted_message = [pow(ord(char), K, p) for char in message]
+    sock.send(pickle.dumps(encrypted_message))
+
+    # Принимаем и расшифровываем ответ
+    encrypted_response = pickle.loads(sock.recv(1024))
+    response = ''.join([chr(pow(char, K, p)) for char in encrypted_response])
+    print("Ответ от сервера:", response)
+
